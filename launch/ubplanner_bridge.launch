@@ -1,8 +1,8 @@
 <launch>
 <node pkg="ubplanner_bridge" type="ubplanner_bridge"
-      args="uav_link" name="ubplanner_bridge" output="screen"/>
-      <param name="map_orig_lat" type="double" value="1.34300" />
-      <param name="map_orig_lon" type="double" value="103.68017" />     
-<!--       <remap from="/vins_estimator/odometry" to="/NTU_internal/drone_feedback" />    -->
-
+      args="uav_link" name="ubplanner_bridge" output="screen">
+      <param name="~map_orig_lat" type="double" value="1.34300" />
+      <param name="~map_orig_lon" type="double" value="103.68017" />     
+      <remap from="/vins_estimator/odometry" to="/viral2_odometry/pred_odom" />   
+ </node>
 </launch>

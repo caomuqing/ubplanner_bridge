@@ -503,10 +503,10 @@ int main(int argc, char **argv)
     ros::Time::init();
     ros::NodeHandle node;
 
-    if (!node.getParam("map_orig_lat", map_orig_lat_)){
-        std::cout<<"not getting param!";
-        exit(-1);
-    }
+    // if (!node.getParam("map_orig_lat", map_orig_lat_)){
+    //     std::cout<<"not getting param!";
+    //     exit(-1);
+    // }
     node.getParam("map_orig_lon", map_orig_lon_);
     odometry_starting_time = ros::Time::now();
     //image_transport::ImageTransport it(node);
