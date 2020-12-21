@@ -401,7 +401,13 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
   }
   //traj_update_time=ros::Time::now();
 
-    uint8_t flag = (DJISDK::VERTICAL_POSITION |
+    // uint8_t flag = (DJISDK::VERTICAL_POSITION |
+    //                 DJISDK::HORIZONTAL_ANGLE |
+    //                 DJISDK::YAW_RATE |
+    //                 DJISDK::HORIZONTAL_BODY     ///|
+    //                 // DJISDK::STABLE_ENABLE
+    //                );
+    uint8_t flag  = (DJISDK::VERTICAL_VELOCITY |
                     DJISDK::HORIZONTAL_ANGLE |
                     DJISDK::YAW_RATE |
                     DJISDK::HORIZONTAL_BODY     ///|
@@ -412,15 +418,24 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
   double roll_cmd = msg->roll;
   double pitch_cmd = msg->pitch;
   double yaw_rate_cmd = msg->yaw_rate;
-  double alt_cmd = msg->thrust.z+altitude_offset_;
+  //double alt_cmd = msg->thrust.z+altitude_offset_;
+  double vel_cmd = msg->thrust.z; //use vel command instead
+  // if(alt_cmd < -20){
+  //   ROS_WARN("Altitude command is below minimum.. ");
+  //   return;
+  // }
+  // if(alt_cmd > 60){
+  //   ROS_WARN("Altitude command is too high.. ");
+  //   return;
+  // }
 
-  if(alt_cmd < -20){
-    ROS_WARN("Altitude command is below minimum.. ");
-    return;
+  if(vel_cmd < -2){
+    ROS_WARN("vel command is below minimum.. ");
+    vel_cmd = -2;
   }
-  if(alt_cmd > 60){
-    ROS_WARN("Altitude command is too high.. ");
-    return;
+  if(vel_cmd > 2){
+    ROS_WARN("vel command is too high.. ");
+    vel_cmd = 2;
   }
 
     // Position_command_out.linear.y = roll;
@@ -431,7 +446,8 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
     sensor_msgs::Joy Joy_output_msg;
     Joy_output_msg.axes.push_back(roll_cmd);
     Joy_output_msg.axes.push_back(pitch_cmd);
-    Joy_output_msg.axes.push_back(alt_cmd);
+    //Joy_output_msg.axes.push_back(alt_cmd);
+    Joy_output_msg.axes.push_back(vel_cmd); //use vel command instead
     Joy_output_msg.axes.push_back(yaw_rate_cmd);
 
     Joy_output_msg.axes.push_back(flag);
@@ -503,11 +519,12 @@ int main(int argc, char **argv)
     ros::Time::init();
     ros::NodeHandle node;
 
-    // if (!node.getParam("map_orig_lat", map_orig_lat_)){
-    //     std::cout<<"not getting param!";
-    //     exit(-1);
-    // }
-    node.getParam("map_orig_lon", map_orig_lon_);
+    if (!node.getParam("map_orig_lat", map_orig_lat_)||
+        !node.getParam("map_orig_lon", map_orig_lon_)){
+        std::cout<<"not getting param!";
+        exit(-1);
+    }
+    ;
     odometry_starting_time = ros::Time::now();
     //image_transport::ImageTransport it(node);
     //image_transport::Subscriber sub = it.subscribe("/camera/image_raw", 1, imageCallback);
@@ -732,7 +749,21 @@ int main(int argc, char **argv)
                 trans_msg.translation.x=target_pose_.pose.pose.position.x;
                 trans_msg.translation.y=target_pose_.pose.pose.position.y;
                 trans_msg.translation.z=target_pose_.pose.pose.position.z;
-                trans_msg.rotation = target_pose_.pose.pose.orientation;
+
+                tf::Quaternion q_imu;
+                tf::Quaternion q_vins(
+                target_pose_.pose.pose.orientation.x,
+                target_pose_.pose.pose.orientation.y,
+                target_pose_.pose.pose.orientation.z,
+                target_pose_.pose.pose.orientation.w);
+                q_imu.setRPY(-3.1415927,0,0);
+                tf::Quaternion _q_uav=q_vins*q_imu;
+                //trans_msg.rotation = target_pose_.pose.pose.orientation;
+                trans_msg.rotation.x=_q_uav.x();
+                trans_msg.rotation.y=_q_uav.y();
+                trans_msg.rotation.z=_q_uav.z();
+                trans_msg.rotation.w=_q_uav.w();
+
                 point_msg.transforms.push_back(trans_msg);
                 geometry_msgs::Twist _vel_msg, _acc_msg;
                 _vel_msg.linear.x=0;

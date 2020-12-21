@@ -182,15 +182,16 @@ void st_vel_cb(const geometry_msgs::Vector3Stamped::ConstPtr &msg)
 int main(int argc, char **argv)
 {
 
-    ros::init(argc, argv, "fake_odom_dji");
+    ros::init(argc, argv, "~");
 
     child_name = uav_frame_name;
     ros::Time::init();
     ros::NodeHandle node;
-    node.getParam("fake_odom_initial_x", fake_odom_initial_x_);
-    node.getParam("fake_odom_initial_y", fake_odom_initial_y_);
-    node.getParam("fake_odom_initial_z", fake_odom_initial_z_);
-    if (!node.getParam("fake_odom_initial_yaw", fake_odom_initial_yaw_)){ 
+
+    if (!node.getParam("fake_odom_initial_yaw", fake_odom_initial_yaw_)||
+        !node.getParam("fake_odom_initial_x", fake_odom_initial_x_)||
+        !node.getParam("fake_odom_initial_y", fake_odom_initial_y_)||
+        !node.getParam("fake_odom_initial_z", fake_odom_initial_z_)){ 
         std::cout<<"not getting param!"<<"\n";
         exit(-1);
     }

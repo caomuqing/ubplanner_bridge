@@ -1,9 +1,12 @@
 <launch>
-<node pkg="ubplanner_bridge" type="fake_odom_dji"
-      args="uav_link2" name="fake_odom_from_dji_output" output="screen"/>
+
       <param name="fake_odom_initial_x" type="double" value="0" />
       <param name="fake_odom_initial_y" type="double" value="0" />
       <param name="fake_odom_initial_z" type="double" value="0" />
       <param name="fake_odom_initial_yaw" type="double" value="0.0" />
+<node pkg="ubplanner_bridge" type="fake_odom_dji"
+      args="fake_odom_dji" name="fake_odom_dji" output="screen">
+      <remap from="/vins_estimator/odometry" to="/viral2_odometry/pred_odom" />   
+ </node>
 
 </launch>
