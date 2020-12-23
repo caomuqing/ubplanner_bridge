@@ -75,7 +75,7 @@ geometry_msgs::QuaternionStamped    initial_compass_heading;
 sensor_msgs::NavSatFix              initial_GPS;
 tf::Quaternion initial_q;
 
-ros::Publisher NTU_internal_path_pub;
+//ros::Publisher NTU_internal_path_pub;
 //ros::Publisher NTU_internal_odom_pub;
 ros::Publisher vins_est_pub;
 
@@ -159,8 +159,8 @@ void fcc_orientation_Callback(const geometry_msgs::QuaternionStamped::ConstPtr &
     // compass_quaternion.quaternion.w = _q2.w();
 
     m.getRPY(orientation_roll, orientation_pitch, orientation_yaw);
-    std::cout << " " << orientation_roll*180/3.1415916 << " " << orientation_pitch*180/3.1415916  
-        << " yaw " << orientation_yaw*180/3.1415916 << std::endl;
+    std::cout << "roll_orig " << orientation_roll*180/3.1415916 << "pitch_orig " << orientation_pitch*180/3.1415916  
+        << " yaw_orig " << orientation_yaw*180/3.1415916 << std::endl;
     
     if(!compass_initlized)
     {   
@@ -208,7 +208,6 @@ int main(int argc, char **argv)
     ros::Subscriber st_vel_sub = node.subscribe("/dji_sdk/velocity", 1, &st_vel_cb);
 
 
-    NTU_internal_path_pub= node.advertise<nav_msgs::Path>("/NTU_internal/path_in_local_ref", 1);
     //NTU_internal_odom_pub= node.advertise<nav_msgs::Odometry>("/NTU_internal/drone_feedback", 1);
     vins_est_pub= node.advertise<nav_msgs::Odometry>("/vins_estimator/odometry", 1);
 

@@ -143,6 +143,7 @@ ros::Time pilot_input_time_;
 nav_msgs::Odometry feedback;
 float map_orig_lat_=1.34300, map_orig_lon_=103.68017;
 bool transform_fixed=false;
+bool use_gps_=false;
 tf::Transform fixed_transform_world_uav;
 geometry_msgs::TransformStamped fixed_transform_world_uav_tf2;
 static std::string uav_frame_name="local";
@@ -228,6 +229,12 @@ void fcc_gps_Callback(const sensor_msgs::NavSatFix::ConstPtr &this_gps)
 {
     //if(current_GPS_feedback_health.data == 0)
     current_GPS_feedback = *this_gps;
+
+    //std::cout << "\n\n\ncurrent_GPS_feedback\n" << current_GPS_feedback << std::endl;
+}
+
+void origin_gps_Callback(const sensor_msgs::NavSatFix::ConstPtr &this_gps)
+{
     if(!gps_initlized)
     {
         if(this_gps->longitude != 0.0 && this_gps->latitude != 0.0)
@@ -241,7 +248,6 @@ void fcc_gps_Callback(const sensor_msgs::NavSatFix::ConstPtr &this_gps)
 
     //std::cout << "\n\n\ncurrent_GPS_feedback\n" << current_GPS_feedback << std::endl;
 }
-
 
 void fcc_orientation_Callback(const geometry_msgs::QuaternionStamped::ConstPtr &this_quaternion)
 {
@@ -329,9 +335,13 @@ void fix_transform_cb(const geometry_msgs::PointStamped::ConstPtr& msg)
         quaternionMsgToTF(q_in2, q_drone_local);
 
         tf::Matrix3x3 _m(q_drone_local);
-        
+        tf::Matrix3x3 _mmm(q_word_local);
+
         double r,p,y;
         _m.getRPY(r, p, y);
+        double _r,_p,_y;
+        _mmm.getRPY(_r, _p, _y);
+        q_word_local.setRPY(0,0,_y);
 
         tf::Quaternion q_in22;
         q_in22.setRPY(0,0,y);
@@ -348,10 +358,10 @@ void fix_transform_cb(const geometry_msgs::PointStamped::ConstPtr& msg)
         trans_tmp.transform.translation.z=0;
 
         tf::Quaternion _q_inv=_q.inverse();
-        trans_tmp.transform.rotation.x=_q_inv.x();
-        trans_tmp.transform.rotation.y=_q_inv.y();
-        trans_tmp.transform.rotation.z=_q_inv.z();
-        trans_tmp.transform.rotation.w=_q_inv.w();
+        trans_tmp.transform.rotation.x=_q.x();
+        trans_tmp.transform.rotation.y=_q.y();
+        trans_tmp.transform.rotation.z=_q.z();
+        trans_tmp.transform.rotation.w=_q.w();
         geometry_msgs::PointStamped _inpoint, _outpoint;
         _inpoint.point.x=odom_pose_.pose.pose.position.x;
         _inpoint.point.y=odom_pose_.pose.pose.position.y;
@@ -374,12 +384,22 @@ void fix_transform_cb(const geometry_msgs::PointStamped::ConstPtr& msg)
         fixed_transform_world_uav_tf2.header.stamp=ros::Time::now();
         fixed_transform_world_uav_tf2.header.frame_id=global_frame_name;
 
+        trans_tmp.transform.rotation.x=_q_inv.x();
+        trans_tmp.transform.rotation.y=_q_inv.y();
+        trans_tmp.transform.rotation.z=_q_inv.z();
+        trans_tmp.transform.rotation.w=_q_inv.w();
+        //geometry_msgs::PointStamped _inpoint, _outpoint;
+        _inpoint.point.x=feedback.pose.pose.position.x;
+        _inpoint.point.y=feedback.pose.pose.position.y;
+        _inpoint.point.z=feedback.pose.pose.position.z;
+        tf2::doTransform(_inpoint, _outpoint, trans_tmp);
+
         fixed_transform_world_uav_tf2.transform.translation.x=
-          -feedback.pose.pose.position.x+odom_pose_.pose.pose.position.x;
+          -_outpoint.point.x + odom_pose_.pose.pose.position.x;
         fixed_transform_world_uav_tf2.transform.translation.y=
-          -feedback.pose.pose.position.y+odom_pose_.pose.pose.position.y;
+          -_outpoint.point.y + odom_pose_.pose.pose.position.y;
         fixed_transform_world_uav_tf2.transform.translation.z=
-          -feedback.pose.pose.position.z+odom_pose_.pose.pose.position.z;
+          -_outpoint.point.z + odom_pose_.pose.pose.position.z;
 
         fixed_transform_world_uav_tf2.transform.rotation.x=_q_inv.x();
         fixed_transform_world_uav_tf2.transform.rotation.y=_q_inv.y();
@@ -520,11 +540,11 @@ int main(int argc, char **argv)
     ros::NodeHandle node;
 
     if (!node.getParam("map_orig_lat", map_orig_lat_)||
-        !node.getParam("map_orig_lon", map_orig_lon_)){
+        !node.getParam("map_orig_lon", map_orig_lon_)||
+        !node.getParam("global_gps_ref", use_gps_)){
         std::cout<<"not getting param!";
         exit(-1);
     }
-    ;
     odometry_starting_time = ros::Time::now();
     //image_transport::ImageTransport it(node);
     //image_transport::Subscriber sub = it.subscribe("/camera/image_raw", 1, imageCallback);
@@ -541,8 +561,14 @@ int main(int argc, char **argv)
 
 
     ros::Subscriber fcc_orientation_sub = node.subscribe("/dji_sdk/attitude", 1, &fcc_orientation_Callback);
-    ros::Subscriber fcc_gps_sub = node.subscribe("/gps/fix", 1, &fcc_gps_Callback); //for current use
-                                              //("dji_sdk/gps_position", 1, &fcc_gps_Callback);
+    ros::Subscriber fcc_gps_sub;
+
+    if (use_gps_){
+        fcc_gps_sub = node.subscribe("/dji_sdk/gps_position", 1, &fcc_gps_Callback); 
+    } else {
+        fcc_gps_sub = node.subscribe("/gps/fix", 1, &fcc_gps_Callback);
+    }
+    ros::Subscriber origin_gps_sub = node.subscribe("/gps/fix", 1, &origin_gps_Callback); //for current use
 
     ros::Subscriber path_in_ubplanner_sub = node.subscribe("/urbanplanner/norminalFlightPath", 1, &path_in_ubplanner_Callback);
     ros::Subscriber st_vel_sub = node.subscribe("/dji_sdk/velocity", 1, &st_vel_cb);
@@ -591,6 +617,8 @@ int main(int argc, char **argv)
     traj_update_time=ros::Time::now();
     pilot_input_time_=ros::Time::now();
     tran = &lr;
+    current_GPS_feedback.longitude =initial_GPS.longitude;
+    current_GPS_feedback.latitude =initial_GPS.latitude;
     while (ros::ok())
     {   
         feedback.header.stamp=ros::Time::now();
@@ -600,7 +628,7 @@ int main(int argc, char **argv)
                                         +_rand%5*0.001;
                                       //(current_GPS_feedback.longitude -map_orig_lon_)*1.1131/0.00001;
         feedback.pose.pose.position.y = (current_GPS_feedback.latitude -initial_GPS.latitude)*1.1131/0.00001
-                                        +_rand%5*0.001;;
+                                        +_rand%5*0.001;
                                       //(current_GPS_feedback.latitude -map_orig_lat_)*1.1131/0.00001;
         feedback.pose.pose.position.z = 0.0f;//current_GPS_feedback.altitude; //-  initial_GPS.altitude;
       //  feedback.pose.pose.orientation.z = orientation_yaw - 3.1415926/2;
