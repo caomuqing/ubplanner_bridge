@@ -326,6 +326,18 @@ int main(int argc, char **argv)
             fake_vins_odom.twist.twist.linear.z = out_vel.vector.z;
 
             vins_est_pub.publish(fake_vins_odom);
+
+            tf::Transform dynamic_transform_local_uav;
+            dynamic_transform_local_uav.setRotation(_q_uav);
+            dynamic_transform_local_uav.setOrigin(
+                tf::Vector3(fake_vins_odom.pose.pose.position.x,
+                            fake_vins_odom.pose.pose.position.y, 
+                            fake_vins_odom.pose.pose.position.z));
+            static tf::TransformBroadcaster br;
+
+            br.sendTransform(tf::StampedTransform(dynamic_transform_local_uav, 
+                ros::Time::now(), uav_frame_name, "base_link"));
+
             std::cout<< "current position is "<<"\n"<<fake_vins_odom.pose.pose.position<<"\n";
             std::cout<< "current velocity is "<<"\n"<<fake_vins_odom.twist.twist.linear<<"\n";
 
