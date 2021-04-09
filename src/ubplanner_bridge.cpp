@@ -499,11 +499,19 @@ void rcCallback(const sensor_msgs::Joy::ConstPtr &joy)
     Joy_stick_input_in_twist.linear.z = 1 * joy->axes[3];
     //for m100: input_rc.axes[4]   F: -8000  A: 0 P: 8000
     //for m100: input_rc.axes[5]   switch down: -4545  A: 0 P: -10000
-    if(input_rc.axes[5] <-8000){
-        Software_bypass = false;
-    } else {
-        Software_bypass = true;
-    }   
+    if (sim_type_=="vins_dji"){
+        if(input_rc.axes[5] <-8000){
+            Software_bypass = false;
+        } else {
+            Software_bypass = true;
+        }   
+    } else if (sim_type_=="vinsfusion_dji_mini"){ //using futaba RC
+        if(input_rc.axes[4] >0.0){
+            Software_bypass = false;
+        } else {
+            Software_bypass = true;
+        }          
+    }
 }
 
 void heightCallback(const std_msgs::Float32::ConstPtr &msg)
