@@ -111,7 +111,7 @@ bool velocity_updated=false;
 
 
 
-
+std::string sim_type_;
 
 double orientation_roll, orientation_pitch, orientation_yaw;
 geometry_msgs::QuaternionStamped compass_quaternion;
@@ -191,9 +191,14 @@ int main(int argc, char **argv)
     if (!node.getParam("fake_odom_initial_yaw", fake_odom_initial_yaw_)||
         !node.getParam("fake_odom_initial_x", fake_odom_initial_x_)||
         !node.getParam("fake_odom_initial_y", fake_odom_initial_y_)||
-        !node.getParam("fake_odom_initial_z", fake_odom_initial_z_)){ 
+        !node.getParam("fake_odom_initial_z", fake_odom_initial_z_)||
+        !node.getParam("sim_type", sim_type_)){ 
         std::cout<<"not getting param!"<<"\n";
         exit(-1);
+    } else if (sim_type_!="dji" && sim_type_!="vins_dji" && sim_type_!="vins_st" && 
+    sim_type_!="sim_st" && sim_type_!="vinsfusion_dji_mini"){
+    ROS_WARN("not good, don't know in simulation or real flight");
+    exit(-1);
     }
 
 
@@ -253,7 +258,12 @@ int main(int argc, char **argv)
 
             tf::Quaternion q_vins, q_imu;
             q_vins.setRPY(0,0,fake_odom_initial_yaw_/180*3.1415927);
-            q_imu.setRPY(3.1415927,0,0);
+            if (sim_type_=="vinsfusion_dji_mini"){
+                q_imu.setRPY(0,0,0); 
+            } else {
+                q_imu.setRPY(3.1415927,0,0);                
+            }
+
             tf::Quaternion _ini_quat;
             quaternionMsgToTF(initial_compass_heading.quaternion, _ini_quat);
 
@@ -293,7 +303,11 @@ int main(int argc, char **argv)
             compass_quaternion.quaternion.w);
             tf::Quaternion q_vins, q_imu;
             q_vins.setRPY(0,0,fake_odom_initial_yaw_/180*3.1415927);
-            q_imu.setRPY(3.1415927,0,0);
+            if (sim_type_=="vinsfusion_dji_mini"){
+                q_imu.setRPY(0,0,0); 
+            } else {
+                q_imu.setRPY(3.1415927,0,0);                
+            }            
             tf::Quaternion _ini_quat;
             quaternionMsgToTF(initial_compass_heading.quaternion, _ini_quat);
 

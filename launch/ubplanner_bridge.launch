@@ -3,6 +3,7 @@
       <param name="map_orig_lat" type="double" value="1.34300" />
       <param name="map_orig_lon" type="double" value="103.68017" />  
       <param name="global_gps_ref" type="bool" value="false" />  
+      <param name="sim_type" type="string" value="vinsfusion_dji_mini" />  
 
 <node pkg="ubplanner_bridge" type="ubplanner_bridge"
       args="uav_link" name="ubplanner_bridge" output="screen">   

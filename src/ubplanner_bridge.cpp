@@ -151,6 +151,7 @@ static std::string global_frame_name="world";
 float height_=0, altitude_offset_=0;
 nav_msgs::Path current_path_map_frame_;
 bool got_path_=false;
+std::string sim_type_;
 
 void odometry_Callback(const nav_msgs::Odometry::ConstPtr &msg)
 {
@@ -421,60 +422,68 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
   }
   //traj_update_time=ros::Time::now();
 
-    // uint8_t flag = (DJISDK::VERTICAL_POSITION |
-    //                 DJISDK::HORIZONTAL_ANGLE |
-    //                 DJISDK::YAW_RATE |
-    //                 DJISDK::HORIZONTAL_BODY     ///|
-    //                 // DJISDK::STABLE_ENABLE
-    //                );
-    uint8_t flag  = (DJISDK::VERTICAL_VELOCITY |
+  if (sim_type_=="vins_dji"){
+        uint8_t flag  = (DJISDK::VERTICAL_VELOCITY |
+                        DJISDK::HORIZONTAL_ANGLE |
+                        DJISDK::YAW_RATE |
+                        DJISDK::HORIZONTAL_BODY     ///|
+                        // DJISDK::STABLE_ENABLE
+                       );
+      ROS_INFO_STREAM_ONCE("Received first roll pitch yawrate altitude command msg");
+
+      double roll_cmd = msg->roll;
+      double pitch_cmd = msg->pitch;
+      double yaw_rate_cmd = msg->yaw_rate;
+      //double alt_cmd = msg->thrust.z+altitude_offset_;
+      double vel_cmd = msg->thrust.z; //use vel command instead
+      // if(alt_cmd < -20){
+      //   ROS_WARN("Altitude command is below minimum.. ");
+      //   return;
+      // }
+      // if(alt_cmd > 60){
+      //   ROS_WARN("Altitude command is too high.. ");
+      //   return;
+      // }
+
+      if(vel_cmd < -2){
+        ROS_WARN("vel command is below minimum.. ");
+        vel_cmd = -2;
+      }
+      if(vel_cmd > 2){
+        ROS_WARN("vel command is too high.. ");
+        vel_cmd = 2;
+      }
+    sensor_msgs::Joy Joy_output_msg;
+    Joy_output_msg.axes.push_back(roll_cmd);
+    Joy_output_msg.axes.push_back(pitch_cmd);
+    Joy_output_msg.axes.push_back(vel_cmd); //use vel command instead
+    Joy_output_msg.axes.push_back(yaw_rate_cmd);
+    Joy_output_msg.axes.push_back(flag);
+    ctrlVelYawRatePub.publish(Joy_output_msg);   
+
+  } else if (sim_type_=="vinsfusion_dji_mini"){
+    uint8_t flag = (DJISDK::VERTICAL_THRUST |
                     DJISDK::HORIZONTAL_ANGLE |
                     DJISDK::YAW_RATE |
                     DJISDK::HORIZONTAL_BODY     ///|
                     // DJISDK::STABLE_ENABLE
                    );
-  ROS_INFO_STREAM_ONCE("Received first roll pitch yawrate altitude command msg");
+      ROS_INFO_STREAM_ONCE("Received first roll pitch yawrate thrust command msg");
 
-  double roll_cmd = msg->roll;
-  double pitch_cmd = msg->pitch;
-  double yaw_rate_cmd = msg->yaw_rate;
-  //double alt_cmd = msg->thrust.z+altitude_offset_;
-  double vel_cmd = msg->thrust.z; //use vel command instead
-  // if(alt_cmd < -20){
-  //   ROS_WARN("Altitude command is below minimum.. ");
-  //   return;
-  // }
-  // if(alt_cmd > 60){
-  //   ROS_WARN("Altitude command is too high.. ");
-  //   return;
-  // }
-
-  if(vel_cmd < -2){
-    ROS_WARN("vel command is below minimum.. ");
-    vel_cmd = -2;
-  }
-  if(vel_cmd > 2){
-    ROS_WARN("vel command is too high.. ");
-    vel_cmd = 2;
-  }
-
-    // Position_command_out.linear.y = roll;
-    // Position_command_out.linear.x = pitch;
-    // Position_command_out.angular.z = -yaw;
-    // Position_command_out.linear.z = throttle;
-
+      double roll_cmd = msg->roll;
+      double pitch_cmd = msg->pitch;
+      double yaw_rate_cmd = msg->yaw_rate;
+      double throttle_cmd = msg->thrust.z;
+ 
     sensor_msgs::Joy Joy_output_msg;
     Joy_output_msg.axes.push_back(roll_cmd);
     Joy_output_msg.axes.push_back(pitch_cmd);
-    //Joy_output_msg.axes.push_back(alt_cmd);
-    Joy_output_msg.axes.push_back(vel_cmd); //use vel command instead
+    Joy_output_msg.axes.push_back(throttle_cmd); //use vel command instead
     Joy_output_msg.axes.push_back(yaw_rate_cmd);
-
     Joy_output_msg.axes.push_back(flag);
+    ctrlVelYawRatePub.publish(Joy_output_msg);         
+  }
 
-    //vel_pub_.publish(Joy_stick_input_in_twist);  //linear output for visuzaliztion
-    //if(!start_gps_mission_once)
-    ctrlVelYawRatePub.publish(Joy_output_msg);   //nonlinear output for control
 }
 
 void rcCallback(const sensor_msgs::Joy::ConstPtr &joy)
@@ -541,9 +550,14 @@ int main(int argc, char **argv)
 
     if (!node.getParam("map_orig_lat", map_orig_lat_)||
         !node.getParam("map_orig_lon", map_orig_lon_)||
-        !node.getParam("global_gps_ref", use_gps_)){
+        !node.getParam("global_gps_ref", use_gps_)||
+        !node.getParam("sim_type", sim_type_)){
         std::cout<<"not getting param!";
         exit(-1);
+    } else if (sim_type_!="rotors" && sim_type_!="dji" && sim_type_!="vins_dji" && sim_type_!="vins_st" && 
+    sim_type_!="sim_st" && sim_type_!="vinsfusion_dji_mini"){
+    ROS_WARN("not good, don't know in simulation or real flight");
+    exit(-1);
     }
     odometry_starting_time = ros::Time::now();
     //image_transport::ImageTransport it(node);
