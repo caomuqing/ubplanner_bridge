@@ -148,10 +148,11 @@ tf::Transform fixed_transform_world_uav;
 geometry_msgs::TransformStamped fixed_transform_world_uav_tf2;
 static std::string uav_frame_name="local";
 static std::string global_frame_name="world";
-float height_=0, altitude_offset_=0;
+float height_=0, altitude_offset_=0, manual_throttle_low_=0, manual_throttle_high_=1.0;
 nav_msgs::Path current_path_map_frame_;
 bool got_path_=false;
 std::string sim_type_;
+bool manual_enable_;
 
 void odometry_Callback(const nav_msgs::Odometry::ConstPtr &msg)
 {
@@ -454,6 +455,7 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
         vel_cmd = 2;
       }
     sensor_msgs::Joy Joy_output_msg;
+    Joy_output_msg.header.stamp=ros::Time::now();
     Joy_output_msg.axes.push_back(roll_cmd);
     Joy_output_msg.axes.push_back(pitch_cmd);
     Joy_output_msg.axes.push_back(vel_cmd); //use vel command instead
@@ -461,7 +463,7 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
     Joy_output_msg.axes.push_back(flag);
     ctrlVelYawRatePub.publish(Joy_output_msg);   
 
-  } else if (sim_type_=="vinsfusion_dji_mini"){
+  } else if (sim_type_=="vinsfusion_dji_mini" || sim_type_=="vicon_dji_mini"){
     uint8_t flag = (DJISDK::VERTICAL_THRUST |
                     DJISDK::HORIZONTAL_ANGLE |
                     DJISDK::YAW_RATE |
@@ -476,6 +478,7 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
       double throttle_cmd = msg->thrust.z;
  
     sensor_msgs::Joy Joy_output_msg;
+    Joy_output_msg.header.stamp=ros::Time::now();    
     Joy_output_msg.axes.push_back(roll_cmd);
     Joy_output_msg.axes.push_back(pitch_cmd);
     Joy_output_msg.axes.push_back(throttle_cmd); //use vel command instead
@@ -505,7 +508,7 @@ void rcCallback(const sensor_msgs::Joy::ConstPtr &joy)
         } else {
             Software_bypass = true;
         }   
-    } else if (sim_type_=="vinsfusion_dji_mini"){ //using futaba RC
+    } else if (sim_type_=="vinsfusion_dji_mini" || sim_type_=="vicon_dji_mini"){ //using futaba RC
         if(input_rc.axes[4] >0.0){
             Software_bypass = false;
         } else {
@@ -559,11 +562,14 @@ int main(int argc, char **argv)
     if (!node.getParam("map_orig_lat", map_orig_lat_)||
         !node.getParam("map_orig_lon", map_orig_lon_)||
         !node.getParam("global_gps_ref", use_gps_)||
-        !node.getParam("sim_type", sim_type_)){
+        !node.getParam("sim_type", sim_type_)||
+        !node.getParam("manual_enable", manual_enable_)||
+        !node.getParam("manual_throttle_low",manual_throttle_low_)||
+        !node.getParam("manual_throttle_high",manual_throttle_high_)){
         std::cout<<"not getting param!";
         exit(-1);
     } else if (sim_type_!="rotors" && sim_type_!="dji" && sim_type_!="vins_dji" && sim_type_!="vins_st" && 
-    sim_type_!="sim_st" && sim_type_!="vinsfusion_dji_mini"){
+    sim_type_!="sim_st" && sim_type_!="vinsfusion_dji_mini" && sim_type_!="vicon_dji_mini"){
     ROS_WARN("not good, don't know in simulation or real flight");
     exit(-1);
     }
@@ -722,7 +728,41 @@ int main(int argc, char **argv)
         }
         previousSoftware_bypass = Software_bypass;
 
-        if (Software_bypass && (ros::Time::now()-  traj_update_time).toSec()>0.11){
+        if (Software_bypass && manual_enable_){ //enable thrust+roll pitch yaw control
+            there_is_pilot_input_=true;
+            pilot_input_time_=ros::Time::now();
+            //std::cout << (Joy_stick_input_in_twist.linear.x) << " " ;
+            //std::cout << (prev_Joy_stick_input_in_twist.linear.x) << std::endl;
+            geometry_msgs::Twist Position_command_out;
+
+            double roll = Manual_degree_limit * expmapping((double) Joy_stick_input_in_twist.linear.y);
+            double pitch = Manual_degree_limit * expmapping((double) Joy_stick_input_in_twist.linear.x);
+            double yaw = Yaw_Manual_degree_limit * expmapping((double) Joy_stick_input_in_twist.angular.z);
+            double throttle = scaling((double) Joy_stick_input_in_twist.linear.z, -1.0, 1.0, 
+                                        manual_throttle_low_, manual_throttle_high_); //mq
+            Position_command_out.linear.y = roll;
+            Position_command_out.linear.x = pitch;
+            Position_command_out.angular.z = -yaw;
+            Position_command_out.linear.z = throttle;
+
+            sensor_msgs::Joy Joy_output_msg;
+            Joy_output_msg.header.stamp=ros::Time::now();
+            Joy_output_msg.axes.push_back(Position_command_out.linear.y);
+            Joy_output_msg.axes.push_back(Position_command_out.linear.x);
+            Joy_output_msg.axes.push_back(Position_command_out.linear.z);
+            Joy_output_msg.axes.push_back(Position_command_out.angular.z);
+
+            uint8_t _flag = (DJISDK::VERTICAL_THRUST |
+                            DJISDK::HORIZONTAL_ANGLE |
+                            DJISDK::YAW_RATE |
+                            DJISDK::HORIZONTAL_BODY     ///|
+                            // DJISDK::STABLE_ENABLE
+                           );
+            Joy_output_msg.axes.push_back(_flag);
+
+            ctrlVelYawRatePub.publish(Joy_output_msg);   //nonlinear output for control
+
+        }else if (Software_bypass && (ros::Time::now()-  traj_update_time).toSec()>0.11){
             if(Joy_stick_input_in_twist.linear.y != 0 || 
                 Joy_stick_input_in_twist.linear.x != 0 || 
                 Joy_stick_input_in_twist.angular.z != 0 || 
@@ -749,6 +789,7 @@ int main(int argc, char **argv)
                 Position_command_out.linear.z = throttle;
 
                 sensor_msgs::Joy Joy_output_msg;
+                Joy_output_msg.header.stamp=ros::Time::now();
                 Joy_output_msg.axes.push_back(Position_command_out.linear.y);
                 Joy_output_msg.axes.push_back(Position_command_out.linear.x);
                 Joy_output_msg.axes.push_back(Position_command_out.linear.z);
@@ -778,6 +819,7 @@ int main(int argc, char **argv)
                 target_pose_.pose.pose.position.z+=odom_v_square/4*_vz/_speed;
 
                 sensor_msgs::Joy Joy_output_msg;
+                Joy_output_msg.header.stamp=ros::Time::now();
                 Joy_output_msg.axes.push_back(0.0f);
                 Joy_output_msg.axes.push_back(0.0f);
                 Joy_output_msg.axes.push_back(0.0f);

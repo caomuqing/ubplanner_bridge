@@ -4,9 +4,14 @@
       <param name="map_orig_lon" type="double" value="103.68017" />  
       <param name="global_gps_ref" type="bool" value="false" />  
       <param name="sim_type" type="string" value="vinsfusion_dji_mini" />  
+      <param name="manual_enable" type="bool" value="false" />  
+      <param name="manual_throttle_low" type="double" value="0.0" />  
+      <param name="manual_throttle_high" type="double" value="100.0" />  
 
 <node pkg="ubplanner_bridge" type="ubplanner_bridge"
-      args="uav_link" name="ubplanner_bridge" output="screen">   
-      <remap from="/vins_estimator/odometry" to="/viral2_odometry/pred_odom" />   
+      args="uav_link" name="ubplanner_bridge" output="screen">  
+      <!-- <remap from="/vins_estimator/odometry" to="/viral2_odometry/pred_odom" /> -->  
+      <remap from="/vins_estimator/odometry" to="/msf_core/odometry" />  
+      
  </node>
 </launch>
