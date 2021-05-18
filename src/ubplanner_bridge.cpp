@@ -166,7 +166,7 @@ void odometry_Callback(const nav_msgs::Odometry::ConstPtr &msg)
     // odom_pose_.pose.pose.orientation.y = currentdata.pose.pose.orientation.y;
     // odom_pose_.pose.pose.orientation.z = currentdata.pose.pose.orientation.z;
     // odom_pose_.pose.pose.orientation.w = currentdata.pose.pose.orientation.w;
-    if (odom_pose_.pose.pose.position.z>0.20){
+    if (odom_pose_.pose.pose.position.z>0.15){
         idle_state_before_mission_=false;
     }
     // if(compass_initlized && gps_initlized)
@@ -426,19 +426,14 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
   //traj_update_time=ros::Time::now();
 
   if (sim_type_=="vins_dji"||(sim_type_=="vinsfusion_dji_mini"&&!thrust_control_)){
-        uint8_t flag  = (DJISDK::VERTICAL_VELOCITY |
-                        DJISDK::HORIZONTAL_ANGLE |
-                        DJISDK::YAW_RATE |
-                        DJISDK::HORIZONTAL_BODY     ///|
-                        // DJISDK::STABLE_ENABLE
-                       );
+        uint8_t flag;
       ROS_INFO_STREAM_ONCE("Received first roll pitch yawrate altitude command msg");
 
       double roll_cmd = msg->roll;
       double pitch_cmd = msg->pitch;
       double yaw_rate_cmd = msg->yaw_rate;
       //double alt_cmd = msg->thrust.z+altitude_offset_;
-      double vel_cmd = msg->thrust.z; //use vel command instead
+      double vel_cmd; //use vel command instead
       // if(alt_cmd < -20){
       //   ROS_WARN("Altitude command is below minimum.. ");
       //   return;
@@ -447,15 +442,33 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
       //   ROS_WARN("Altitude command is too high.. ");
       //   return;
       // }
+      if (idle_state_before_mission_){
+        vel_cmd = 5.0;
+        flag = (DJISDK::VERTICAL_THRUST |
+                DJISDK::HORIZONTAL_ANGLE |
+                DJISDK::YAW_RATE |
+                DJISDK::HORIZONTAL_BODY     ///|
+                // DJISDK::STABLE_ENABLE
+               );       
+      } else {
+        vel_cmd = msg->thrust.z;
+        flag  = (DJISDK::VERTICAL_VELOCITY |
+                    DJISDK::HORIZONTAL_ANGLE |
+                    DJISDK::YAW_RATE |
+                    DJISDK::HORIZONTAL_BODY     ///|
+                    // DJISDK::STABLE_ENABLE
+                   );       
+          if(vel_cmd < -2){
+            ROS_WARN("vel command is below minimum.. ");
+            vel_cmd = -2;
+          }
+          if(vel_cmd > 2){
+            ROS_WARN("vel command is too high.. ");
+            vel_cmd = 2;
+          }
+     }
 
-      if(vel_cmd < -2){
-        ROS_WARN("vel command is below minimum.. ");
-        vel_cmd = -2;
-      }
-      if(vel_cmd > 2){
-        ROS_WARN("vel command is too high.. ");
-        vel_cmd = 2;
-      }
+
     sensor_msgs::Joy Joy_output_msg;
     Joy_output_msg.header.stamp=ros::Time::now();
     Joy_output_msg.axes.push_back(roll_cmd);
