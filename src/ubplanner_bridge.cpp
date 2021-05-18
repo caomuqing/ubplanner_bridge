@@ -152,7 +152,7 @@ float height_=0, altitude_offset_=0, manual_throttle_low_=0, manual_throttle_hig
 nav_msgs::Path current_path_map_frame_;
 bool got_path_=false;
 std::string sim_type_;
-bool manual_enable_;
+bool manual_enable_,thrust_control_=true, idle_state_before_mission_=true;
 
 void odometry_Callback(const nav_msgs::Odometry::ConstPtr &msg)
 {
@@ -166,7 +166,9 @@ void odometry_Callback(const nav_msgs::Odometry::ConstPtr &msg)
     // odom_pose_.pose.pose.orientation.y = currentdata.pose.pose.orientation.y;
     // odom_pose_.pose.pose.orientation.z = currentdata.pose.pose.orientation.z;
     // odom_pose_.pose.pose.orientation.w = currentdata.pose.pose.orientation.w;
-
+    if (odom_pose_.pose.pose.position.z>0.20){
+        idle_state_before_mission_=false;
+    }
     // if(compass_initlized && gps_initlized)
     // {
     //     try
@@ -423,7 +425,7 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
   }
   //traj_update_time=ros::Time::now();
 
-  if (sim_type_=="vins_dji"){
+  if (sim_type_=="vins_dji"||(sim_type_=="vinsfusion_dji_mini"&&!thrust_control_)){
         uint8_t flag  = (DJISDK::VERTICAL_VELOCITY |
                         DJISDK::HORIZONTAL_ANGLE |
                         DJISDK::YAW_RATE |
@@ -475,7 +477,13 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
       double roll_cmd = msg->roll;
       double pitch_cmd = msg->pitch;
       double yaw_rate_cmd = msg->yaw_rate;
-      double throttle_cmd = msg->thrust.z;
+      double throttle_cmd;
+
+      if (idle_state_before_mission_){
+        throttle_cmd = 5.0;
+      } else {
+        throttle_cmd = msg->thrust.z;
+      }
  
     sensor_msgs::Joy Joy_output_msg;
     Joy_output_msg.header.stamp=ros::Time::now();    
@@ -543,6 +551,7 @@ double scaling(double input, double in_low, double in_high, double out_low, doub
 
 void trajectory_cb(const trajectory_msgs::MultiDOFJointTrajectory::ConstPtr& msg)
 {
+    idle_state_before_mission_=false;
     traj_update_time=ros::Time::now();
     traj_true_pub.publish(msg);
     target_pose_=odom_pose_;
@@ -565,7 +574,8 @@ int main(int argc, char **argv)
         !node.getParam("sim_type", sim_type_)||
         !node.getParam("manual_enable", manual_enable_)||
         !node.getParam("manual_throttle_low",manual_throttle_low_)||
-        !node.getParam("manual_throttle_high",manual_throttle_high_)){
+        !node.getParam("manual_throttle_high",manual_throttle_high_)||
+        !node.getParam("enable_thrust_control",thrust_control_)){
         std::cout<<"not getting param!";
         exit(-1);
     } else if (sim_type_!="rotors" && sim_type_!="dji" && sim_type_!="vins_dji" && sim_type_!="vins_st" && 
@@ -762,7 +772,7 @@ int main(int argc, char **argv)
 
             ctrlVelYawRatePub.publish(Joy_output_msg);   //nonlinear output for control
 
-        }else if (Software_bypass && (ros::Time::now()-  traj_update_time).toSec()>0.11){
+        }else if (Software_bypass && (ros::Time::now()-  traj_update_time).toSec()>0.5){
             if(Joy_stick_input_in_twist.linear.y != 0 || 
                 Joy_stick_input_in_twist.linear.x != 0 || 
                 Joy_stick_input_in_twist.angular.z != 0 || 
@@ -805,7 +815,7 @@ int main(int argc, char **argv)
 
                 ctrlVelYawRatePub.publish(Joy_output_msg);   //nonlinear output for control
                 target_pose_=odom_pose_;
-            } else if ((ros::Time::now()-  pilot_input_time_).toSec()<0.1){ //no control, let drone come to rest
+            } else if ((ros::Time::now()-  pilot_input_time_).toSec()<0.5){ //no control, let drone come to rest
                 there_is_pilot_input_=false;
                 float _vx, _vy, _vz;
                 _vx=currentdata.twist.twist.linear.x;

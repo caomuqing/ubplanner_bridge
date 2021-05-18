@@ -7,11 +7,12 @@
       <param name="manual_enable" type="bool" value="false" />  
       <param name="manual_throttle_low" type="double" value="0.0" />  
       <param name="manual_throttle_high" type="double" value="100.0" />  
+      <param name="enable_thrust_control" type="bool" value="true" />      
 
 <node pkg="ubplanner_bridge" type="ubplanner_bridge"
       args="uav_link" name="ubplanner_bridge" output="screen">  
       <!-- <remap from="/vins_estimator/odometry" to="/viral2_odometry/pred_odom" /> -->  
-      <remap from="/vins_estimator/odometry" to="/msf_core/odometry" />  
-      
+<!--       <remap from="/vins_estimator/odometry" to="/msf_core/odometry" />  
+ -->      
  </node>
 </launch>
