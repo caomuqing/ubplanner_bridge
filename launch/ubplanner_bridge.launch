@@ -1,9 +1,13 @@
 <launch>
 
-      <param name="map_orig_lat" type="double" value="1.34300" />
-      <param name="map_orig_lon" type="double" value="103.68017" />  
+
+      
 <node pkg="ubplanner_bridge" type="ubplanner_bridge"
       args="uav_link" name="ubplanner_bridge" output="screen">   
       <remap from="/vins_estimator/odometry" to="/viral2_odometry/pred_odom" />   
+	  <rosparam file="$(find urbanplanner)/cfg/uplanner_params.yaml" command="load" />
+      <param name="map_orig_lat" type="double" value="1.34300" />
+      <param name="map_orig_lon" type="double" value="103.68017" />  
+      <param name="use_rviz_to_plan_path" type="bool" value="false" />  	  
  </node>
 </launch>

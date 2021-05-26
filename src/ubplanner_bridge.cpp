@@ -138,6 +138,8 @@ ros::Time traj_update_time;
 ros::Publisher traj_true_pub;
 geometry_msgs::PoseWithCovarianceStamped target_pose_;
 bool there_is_pilot_input_=false;
+bool pilot_interrup_during_auto=false;
+
 ros::Time pilot_input_time_;
 
 nav_msgs::Odometry feedback;
@@ -150,6 +152,8 @@ static std::string global_frame_name="world";
 float height_=0, altitude_offset_=0;
 nav_msgs::Path current_path_map_frame_;
 bool got_path_=false;
+float max_flight_height=10.0, h_interval=5.0, v_interval=3.0;
+bool use_preplanned_path=false, first_time_in_software_bypass=true;
 
 void odometry_Callback(const nav_msgs::Odometry::ConstPtr &msg)
 {
@@ -503,6 +507,8 @@ double scaling(double input, double in_low, double in_high, double out_low, doub
 
 void trajectory_cb(const trajectory_msgs::MultiDOFJointTrajectory::ConstPtr& msg)
 {
+    if (pilot_interrup_during_auto) return;
+
     traj_update_time=ros::Time::now();
     traj_true_pub.publish(msg);
     target_pose_=odom_pose_;
@@ -517,10 +523,14 @@ int main(int argc, char **argv)
 
     child_name = uav_frame_name;
     ros::Time::init();
-    ros::NodeHandle node;
+    ros::NodeHandle node("~");
 
     if (!node.getParam("map_orig_lat", map_orig_lat_)||
-        !node.getParam("map_orig_lon", map_orig_lon_)){
+        !node.getParam("map_orig_lon", map_orig_lon_)||
+        !node.getParam("max_flight_height", max_flight_height)||
+        !node.getParam("vertical_interval", v_interval)||
+        !node.getParam("horizontal_interval", h_interval)||
+        !node.getParam("use_rviz_to_plan_path", use_preplanned_path)){
         std::cout<<"not getting param!";
         exit(-1);
     }
@@ -569,8 +579,8 @@ int main(int argc, char **argv)
 
     //ros::Subscriber flightStatusSub         = node.subscribe("dji_sdk/flight_status", 1, &flight_status_callback);
 
-    ctrlVelYawRatePub       = node.advertise<sensor_msgs::Joy>("dji_sdk/flight_control_setpoint_generic", 1);  // new dji way
-    sdk_ctrl_authority_service              = node.serviceClient<dji_sdk::SDKControlAuthority>("dji_sdk/sdk_control_authority");
+    ctrlVelYawRatePub       = node.advertise<sensor_msgs::Joy>("/dji_sdk/flight_control_setpoint_generic", 1);  // new dji way
+    sdk_ctrl_authority_service              = node.serviceClient<dji_sdk::SDKControlAuthority>("/dji_sdk/sdk_control_authority");
 
 
     ros::Subscriber trajectory_sub = node.subscribe<trajectory_msgs::MultiDOFJointTrajectory>(
@@ -646,11 +656,11 @@ int main(int argc, char **argv)
                 sdk_ctrl_authority_service.call(sdkAuthority);
                 std::cout << "Software Control Enabled" << std::endl;
                 target_pose_=odom_pose_;
+                pilot_interrup_during_auto = false;
 
-
-                if (!transform_fixed||!got_path_){
+                if (use_preplanned_path && (!transform_fixed||!got_path_)){
                     ROS_WARN("not getting transform yet! cannot generate waypoint in local frame");
-                } else {
+                } else if (use_preplanned_path){
                     got_path_=false;
                     nav_msgs::Path current_path_local_ref; 
                     current_path_local_ref.header.stamp=ros::Time::now();
@@ -667,17 +677,76 @@ int main(int argc, char **argv)
 
                     NTU_internal_path_pub.publish(current_path_local_ref);
 
+                } else if (!first_time_in_software_bypass){
+
+                    tf::Quaternion q_drone_local;
+                    geometry_msgs::Quaternion q_odom;
+
+                    q_odom = odom_pose_.pose.pose.orientation;
+                    quaternionMsgToTF(q_odom, q_drone_local);
+
+                    float q_odomx=odom_pose_.pose.pose.position.x;
+                    float q_odomy=odom_pose_.pose.pose.position.y;
+                    float q_odomz=odom_pose_.pose.pose.position.z;
+
+                    tf::Matrix3x3 _m(q_drone_local);
+                    double r,p,theta;
+                    _m.getRPY(r, p, theta);
+
+                    got_path_=false;
+                    nav_msgs::Path current_path_local_ref; 
+                    current_path_local_ref.header.stamp=ros::Time::now();
+                    current_path_local_ref.header.frame_id=uav_frame_name; 
+                    int num_level=std::ceil(max_flight_height/v_interval);
+                    geometry_msgs::PoseStamped path_pose_local_ref;
+                    path_pose_local_ref.header.frame_id=uav_frame_name;
+                    path_pose_local_ref.pose.orientation=odom_pose_.pose.pose.orientation;
+
+                    float x_incre=h_interval*sinf(theta);
+                    float y_incre=-h_interval*cosf(theta);
+
+                    for( int i =0; i< num_level; i++){
+                        float int_height=i*v_interval;
+                        if (int_height>max_flight_height) int_height=max_flight_height;
+                        if (i%2==0){
+                            path_pose_local_ref.pose.position.z= q_odomz+int_height;
+                            path_pose_local_ref.pose.position.x= q_odomx;
+                            path_pose_local_ref.pose.position.y= q_odomy;
+                            if (i!=0) {
+                                current_path_local_ref.poses.push_back(path_pose_local_ref);
+                            }
+                            path_pose_local_ref.pose.position.x= q_odomx+x_incre;
+                            path_pose_local_ref.pose.position.y= q_odomy+y_incre;
+                            current_path_local_ref.poses.push_back(path_pose_local_ref);
+                        }else{
+                            path_pose_local_ref.pose.position.z= q_odomz+int_height;
+                            path_pose_local_ref.pose.position.x= q_odomx+x_incre;
+                            path_pose_local_ref.pose.position.y= q_odomy+y_incre;
+                            current_path_local_ref.poses.push_back(path_pose_local_ref);
+                            path_pose_local_ref.pose.position.x= q_odomx;
+                            path_pose_local_ref.pose.position.y= q_odomy;
+                            current_path_local_ref.poses.push_back(path_pose_local_ref);
+                        }
+                    }
+                    NTU_internal_path_pub.publish(current_path_local_ref);
+
                 }
+                if (first_time_in_software_bypass){
+                    first_time_in_software_bypass=false;
+                }               
             }
         }
         previousSoftware_bypass = Software_bypass;
 
-        if (Software_bypass && (ros::Time::now()-  traj_update_time).toSec()>0.11){
+        if (Software_bypass){
             if(Joy_stick_input_in_twist.linear.y != 0 || 
                 Joy_stick_input_in_twist.linear.x != 0 || 
                 Joy_stick_input_in_twist.angular.z != 0 || 
                 Joy_stick_input_in_twist.linear.z != 0){ //if there is pilot rc input
 
+                if ((ros::Time::now()-  traj_update_time).toSec()<0.11){
+                    pilot_interrup_during_auto=true;
+                }
                 there_is_pilot_input_=true;
                 pilot_input_time_=ros::Time::now();
                 //std::cout << (Joy_stick_input_in_twist.linear.x) << " " ;
@@ -714,7 +783,8 @@ int main(int argc, char **argv)
 
                 ctrlVelYawRatePub.publish(Joy_output_msg);   //nonlinear output for control
                 target_pose_=odom_pose_;
-            } else if ((ros::Time::now()-  pilot_input_time_).toSec()<0.1){ //no control, let drone come to rest
+            } else if ((ros::Time::now()-  pilot_input_time_).toSec()<0.1 && 
+                       (ros::Time::now()-  traj_update_time).toSec()>0.11){ //no control, let drone come to rest
                 there_is_pilot_input_=false;
                 float _vx, _vy, _vz;
                 _vx=currentdata.twist.twist.linear.x;
@@ -740,7 +810,7 @@ int main(int argc, char **argv)
                                 // DJISDK::STABLE_ENABLE
                                );
                 Joy_output_msg.axes.push_back(_flag);
-            } else { //no control. send current odom as target pose
+            } else if ((ros::Time::now()-  traj_update_time).toSec()>0.11) { //no control. send current odom as target pose
                 trajectory_msgs::MultiDOFJointTrajectory traj_msg;
                 traj_msg.header.stamp=ros::Time::now();
                 traj_msg.header.frame_id=uav_frame_name;
