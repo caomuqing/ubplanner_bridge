@@ -182,17 +182,18 @@ void st_vel_cb(const geometry_msgs::Vector3Stamped::ConstPtr &msg)
 int main(int argc, char **argv)
 {
 
-    ros::init(argc, argv, "~");
+    ros::init(argc, argv, "fake_odom_dji");
 
     child_name = uav_frame_name;
     ros::Time::init();
     ros::NodeHandle node;
+    ros::NodeHandle paramnode("~");
 
-    if (!node.getParam("fake_odom_initial_yaw", fake_odom_initial_yaw_)||
-        !node.getParam("fake_odom_initial_x", fake_odom_initial_x_)||
-        !node.getParam("fake_odom_initial_y", fake_odom_initial_y_)||
-        !node.getParam("fake_odom_initial_z", fake_odom_initial_z_)||
-        !node.getParam("sim_type", sim_type_)){ 
+    if (!paramnode.getParam("fake_odom_initial_yaw", fake_odom_initial_yaw_)||
+        !paramnode.getParam("fake_odom_initial_x", fake_odom_initial_x_)||
+        !paramnode.getParam("fake_odom_initial_y", fake_odom_initial_y_)||
+        !paramnode.getParam("fake_odom_initial_z", fake_odom_initial_z_)||
+        !paramnode.getParam("sim_type", sim_type_)){ 
         std::cout<<"not getting param!"<<"\n";
         exit(-1);
     } else if (sim_type_!="dji" && sim_type_!="vins_dji" && sim_type_!="vins_st" && 
@@ -207,14 +208,14 @@ int main(int argc, char **argv)
 
     //ros::Subscriber Visual_odometry_sub = node.subscribe("/vins_estimator/odometry", 1, &odometry_Callback);
 
-    ros::Subscriber fcc_orientation_sub = node.subscribe("/dji_sdk/attitude", 1, &fcc_orientation_Callback);
-    ros::Subscriber fcc_gps_sub = node.subscribe("/dji_sdk/gps_position", 1, &fcc_gps_Callback);
+    ros::Subscriber fcc_orientation_sub = node.subscribe("dji_sdk/attitude", 1, &fcc_orientation_Callback);
+    ros::Subscriber fcc_gps_sub = node.subscribe("dji_sdk/gps_position", 1, &fcc_gps_Callback);
 
-    ros::Subscriber st_vel_sub = node.subscribe("/dji_sdk/velocity", 1, &st_vel_cb);
+    ros::Subscriber st_vel_sub = node.subscribe("dji_sdk/velocity", 1, &st_vel_cb);
 
 
     //NTU_internal_odom_pub= node.advertise<nav_msgs::Odometry>("/NTU_internal/drone_feedback", 1);
-    vins_est_pub= node.advertise<nav_msgs::Odometry>("/vins_estimator/odometry", 1);
+    vins_est_pub= node.advertise<nav_msgs::Odometry>("vins_estimator/odometry", 1);
 
     current_GPS_feedback_health.data = 1;
     current_flight_mode.data = 99;

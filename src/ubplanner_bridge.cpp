@@ -584,15 +584,16 @@ int main(int argc, char **argv)
     child_name = uav_frame_name;
     ros::Time::init();
     ros::NodeHandle node;
+    ros::NodeHandle pnode("~"); //node just for getting param
 
-    if (!node.getParam("map_orig_lat", map_orig_lat_)||
-        !node.getParam("map_orig_lon", map_orig_lon_)||
-        !node.getParam("global_gps_ref", use_gps_)||
-        !node.getParam("sim_type", sim_type_)||
-        !node.getParam("manual_enable", manual_enable_)||
-        !node.getParam("manual_throttle_low",manual_throttle_low_)||
-        !node.getParam("manual_throttle_high",manual_throttle_high_)||
-        !node.getParam("enable_thrust_control",thrust_control_)){
+    if (!pnode.getParam("map_orig_lat", map_orig_lat_)||
+        !pnode.getParam("map_orig_lon", map_orig_lon_)||
+        !pnode.getParam("global_gps_ref", use_gps_)||
+        !pnode.getParam("sim_type", sim_type_)||
+        !pnode.getParam("manual_enable", manual_enable_)||
+        !pnode.getParam("manual_throttle_low",manual_throttle_low_)||
+        !pnode.getParam("manual_throttle_high",manual_throttle_high_)||
+        !pnode.getParam("enable_thrust_control",thrust_control_)){
         std::cout<<"not getting param!";
         exit(-1);
     } else if (sim_type_!="rotors" && sim_type_!="dji" && sim_type_!="vins_dji" && sim_type_!="vins_st" && 
@@ -604,10 +605,10 @@ int main(int argc, char **argv)
     //image_transport::ImageTransport it(node);
     //image_transport::Subscriber sub = it.subscribe("/camera/image_raw", 1, imageCallback);
     //ros::Subscriber setpoint_sub = node.subscribe("/dji_sdk/flight_control_setpoint_generic", 1, &setpoint_Callback);
-    setpoint_pub = node.advertise<sensor_msgs::Joy>("/st_sdk/flight_control_setpoint_generic", 1);
-    ros::Subscriber IMU_sub = node.subscribe("/imu/imu", 1, &imuCallback);
+    setpoint_pub = node.advertise<sensor_msgs::Joy>("st_sdk/flight_control_setpoint_generic", 1);
+    ros::Subscriber IMU_sub = node.subscribe("imu/imu", 1, &imuCallback);
 
-    ros::Subscriber Visual_odometry_sub = node.subscribe("/vins_estimator/odometry", 1, &odometry_Callback);
+    ros::Subscriber Visual_odometry_sub = node.subscribe("vins_estimator/odometry", 1, &odometry_Callback);
     //ros::Subscriber cam_pose_sub = node.subscribe("/vins_estimator/camera_pose", 1, &Cam_pose_Callback);
     //ros::Subscriber tracked_feature_sub = node.subscribe("/feature_tracker/feature", 1, &tracked_feature_Callback);
 
@@ -615,38 +616,38 @@ int main(int argc, char **argv)
 
 
 
-    ros::Subscriber fcc_orientation_sub = node.subscribe("/dji_sdk/attitude", 1, &fcc_orientation_Callback);
+    ros::Subscriber fcc_orientation_sub = node.subscribe("dji_sdk/attitude", 1, &fcc_orientation_Callback);
     ros::Subscriber fcc_gps_sub;
 
     if (use_gps_){
-        fcc_gps_sub = node.subscribe("/dji_sdk/gps_position", 1, &fcc_gps_Callback); 
+        fcc_gps_sub = node.subscribe("dji_sdk/gps_position", 1, &fcc_gps_Callback); 
     } else {
-        fcc_gps_sub = node.subscribe("/gps/fix", 1, &fcc_gps_Callback);
+        fcc_gps_sub = node.subscribe("gps/fix", 1, &fcc_gps_Callback);
     }
-    ros::Subscriber origin_gps_sub = node.subscribe("/gps/fix", 1, &origin_gps_Callback); //for current use
+    ros::Subscriber origin_gps_sub = node.subscribe("gps/fix", 1, &origin_gps_Callback); //for current use
 
-    ros::Subscriber path_in_ubplanner_sub = node.subscribe("/urbanplanner/norminalFlightPath", 1, &path_in_ubplanner_Callback);
-    ros::Subscriber st_vel_sub = node.subscribe("/dji_sdk/velocity", 1, &st_vel_cb);
+    ros::Subscriber path_in_ubplanner_sub = node.subscribe("urbanplanner/norminalFlightPath", 1, &path_in_ubplanner_Callback);
+    ros::Subscriber st_vel_sub = node.subscribe("dji_sdk/velocity", 1, &st_vel_cb);
     ros::Subscriber clickedpoint_sub = node.subscribe<geometry_msgs::PointStamped>("/clicked_point", 
                                         10, fix_transform_cb);
 
 
 
-    ros::Publisher VIpose3d_var_pub = node.advertise<std_msgs::Float64>("/visual_odometry_varance", 1);
+    ros::Publisher VIpose3d_var_pub = node.advertise<std_msgs::Float64>("visual_odometry_varance", 1);
     //ros::Publisher VIpose3d_pub = node.advertise<geometry_msgs::PoseWithCovarianceStamped>("/visual_odometry", 1);
-    ros::Publisher imu_status = node.advertise<std_msgs::Float64>("/status_imu", 1);
-    ros::Publisher img_status = node.advertise<std_msgs::Float64>("/status_camera", 1);
-    ros::Publisher odo_status = node.advertise<std_msgs::Float64>("/status_odometry", 1);
-    ros::Publisher current_tracked_feature_number = node.advertise<std_msgs::Int8>("/features_num", 1);
+    ros::Publisher imu_status = node.advertise<std_msgs::Float64>("status_imu", 1);
+    ros::Publisher img_status = node.advertise<std_msgs::Float64>("status_camera", 1);
+    ros::Publisher odo_status = node.advertise<std_msgs::Float64>("status_odometry", 1);
+    ros::Publisher current_tracked_feature_number = node.advertise<std_msgs::Int8>("features_num", 1);
 
-    NTU_internal_path_pub= node.advertise<nav_msgs::Path>("/NTU_internal/path_in_local_ref", 1);
-    NTU_internal_odom_pub= node.advertise<nav_msgs::Odometry>("/NTU_internal/drone_feedback", 1);
+    NTU_internal_path_pub= node.advertise<nav_msgs::Path>("NTU_internal/path_in_local_ref", 1);
+    NTU_internal_odom_pub= node.advertise<nav_msgs::Odometry>("NTU_internal/drone_feedback", 1);
 
 
-    ros::Subscriber command_roll_pitch_yawrate_thrust_sub_ = node.subscribe("/firefly/command/roll_pitch_yawrate_thrust", 1,  //mq
+    ros::Subscriber command_roll_pitch_yawrate_thrust_sub_ = node.subscribe("command/roll_pitch_yawrate_thrust", 1,  //mq
                                                          &commandRollPitchYawrateThrustCallback);
-    ros::Subscriber rc_sub_                 = node.subscribe<sensor_msgs::Joy>("/dji_sdk/rc", 1, &rcCallback);
-    ros::Subscriber altitude_sub_           = node.subscribe<std_msgs::Float32>("/dji_sdk/height_above_takeoff", 1, &heightCallback);
+    ros::Subscriber rc_sub_                 = node.subscribe<sensor_msgs::Joy>("dji_sdk/rc", 1, &rcCallback);
+    ros::Subscriber altitude_sub_           = node.subscribe<std_msgs::Float32>("dji_sdk/height_above_takeoff", 1, &heightCallback);
 
     //ros::Subscriber flightStatusSub         = node.subscribe("dji_sdk/flight_status", 1, &flight_status_callback);
 
@@ -655,9 +656,9 @@ int main(int argc, char **argv)
 
 
     ros::Subscriber trajectory_sub = node.subscribe<trajectory_msgs::MultiDOFJointTrajectory>(
-                                     "/firefly/command/trajectory", 10, trajectory_cb);
+                                     "command/trajectory", 10, trajectory_cb);
 
-    traj_true_pub=node.advertise<trajectory_msgs::MultiDOFJointTrajectory>("/firefly/command/trajectory_true", 10);
+    traj_true_pub=node.advertise<trajectory_msgs::MultiDOFJointTrajectory>("command/trajectory_true", 10);
 
 
 
