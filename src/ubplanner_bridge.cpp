@@ -153,6 +153,7 @@ nav_msgs::Path current_path_map_frame_;
 bool got_path_=false;
 std::string sim_type_;
 bool manual_enable_,thrust_control_=true, idle_state_before_mission_=true;
+bool pilot_interupt = false;
 
 void odometry_Callback(const nav_msgs::Odometry::ConstPtr &msg)
 {
@@ -425,7 +426,8 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
   }
   //traj_update_time=ros::Time::now();
 
-  if (sim_type_=="vins_dji"||(sim_type_=="vinsfusion_dji_mini"&&!thrust_control_)){
+  if (sim_type_=="vins_dji"||(sim_type_=="vinsfusion_dji_mini"&&!thrust_control_)||
+    (sim_type_=="vicon_dji_mini"&&!thrust_control_)){
         uint8_t flag;
       ROS_INFO_STREAM_ONCE("Received first roll pitch yawrate altitude command msg");
 
@@ -458,13 +460,13 @@ void commandRollPitchYawrateThrustCallback(const mav_msgs::RollPitchYawrateThrus
                     DJISDK::HORIZONTAL_BODY     ///|
                     // DJISDK::STABLE_ENABLE
                    );       
-          if(vel_cmd < -2){
+          if(vel_cmd < -0.7){
             ROS_WARN("vel command is below minimum.. ");
-            vel_cmd = -2;
+            vel_cmd = -0.7;
           }
-          if(vel_cmd > 2){
+          if(vel_cmd > 0.7){
             ROS_WARN("vel command is too high.. ");
-            vel_cmd = 2;
+            vel_cmd = 0.7;
           }
      }
 
@@ -564,6 +566,8 @@ double scaling(double input, double in_low, double in_high, double out_low, doub
 
 void trajectory_cb(const trajectory_msgs::MultiDOFJointTrajectory::ConstPtr& msg)
 {
+    if (pilot_interupt) return;
+
     idle_state_before_mission_=false;
     traj_update_time=ros::Time::now();
     traj_true_pub.publish(msg);
@@ -725,7 +729,7 @@ int main(int argc, char **argv)
                 sdk_ctrl_authority_service.call(sdkAuthority);
                 std::cout << "Software Control Enabled" << std::endl;
                 target_pose_=odom_pose_;
-
+                pilot_interupt = false;
 
                 if (!transform_fixed||!got_path_){
                     ROS_WARN("not getting transform yet! cannot generate waypoint in local frame");
@@ -785,12 +789,15 @@ int main(int argc, char **argv)
 
             ctrlVelYawRatePub.publish(Joy_output_msg);   //nonlinear output for control
 
-        }else if (Software_bypass && (ros::Time::now()-  traj_update_time).toSec()>0.5){
+        }else if (Software_bypass){
             if(Joy_stick_input_in_twist.linear.y != 0 || 
                 Joy_stick_input_in_twist.linear.x != 0 || 
                 Joy_stick_input_in_twist.angular.z != 0 || 
                 Joy_stick_input_in_twist.linear.z != 0){ //if there is pilot rc input
 
+                if ((ros::Time::now()-  traj_update_time).toSec()<0.5) { 
+                    pilot_interupt = true; //if pilot intervention when the trajectory is published
+                }
                 there_is_pilot_input_=true;
                 pilot_input_time_=ros::Time::now();
                 //std::cout << (Joy_stick_input_in_twist.linear.x) << " " ;
@@ -828,7 +835,8 @@ int main(int argc, char **argv)
 
                 ctrlVelYawRatePub.publish(Joy_output_msg);   //nonlinear output for control
                 target_pose_=odom_pose_;
-            } else if ((ros::Time::now()-  pilot_input_time_).toSec()<0.5){ //no control, let drone come to rest
+            } else if ((ros::Time::now()-  pilot_input_time_).toSec()<0.5 &&
+                        (pilot_interupt ||(ros::Time::now()-  traj_update_time).toSec()>0.5)){ //no control, let drone come to rest
                 there_is_pilot_input_=false;
                 float _vx, _vy, _vz;
                 _vx=currentdata.twist.twist.linear.x;
@@ -855,7 +863,8 @@ int main(int argc, char **argv)
                                 // DJISDK::STABLE_ENABLE
                                );
                 Joy_output_msg.axes.push_back(_flag);
-            } else { //no control. send current odom as target pose
+            } else if (pilot_interupt ||(ros::Time::now()-  traj_update_time).toSec()>0.5)
+            { //no control. send current odom as target pose
                 trajectory_msgs::MultiDOFJointTrajectory traj_msg;
                 traj_msg.header.stamp=ros::Time::now();
                 traj_msg.header.frame_id=uav_frame_name;

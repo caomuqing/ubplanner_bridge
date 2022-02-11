@@ -86,7 +86,7 @@ float map_orig_lat_=1.34300, map_orig_lon_=103.68017;
 bool transform_fixed=false;
 tf::Transform fixed_transform_world_uav;
 geometry_msgs::TransformStamped fixed_transform_world_uav_tf2;
-static std::string uav_frame_name="local";
+static std::string uav_frame_name="world";
 static std::string global_frame_name="world";
 float fake_odom_initial_x_=0.0f,
       fake_odom_initial_y_=0.0f,
